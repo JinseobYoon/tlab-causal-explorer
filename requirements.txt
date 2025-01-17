@@ -1,0 +1,18 @@
+# 데이터 처리
+pandas==2.2.2
+numpy==1.23.5
+
+# 머신러닝 모델
+scikit-learn==1.5.0
+xgboost==2.1.1
+lightgbm==4.4.0
+
+# 통계 및 시계열 분석
+statsmodels==0.14.0
+scipy>=1.7.1
+
+# 인과적 특성 선택
+pgmpy==0.1.26
+
+# MLflow for experiment tracking
+mlflow==2.18.0
