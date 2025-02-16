@@ -12,7 +12,7 @@ from src.utils import load_data, preprocess_data, evaluate_metrics
 #TODO 실험의 주 목적이 무엇인지 정의하고
 def parse_args():
     parser = argparse.ArgumentParser(description="Run feature selection and model evaluation.")
-    parser.add_argument("--feature_selection_method", type=str, default="CFS",
+    parser.add_argument("--feature_selection_method", type=str, default="NGC",
                         choices=["CFS", "Correlation"], help="Feature selection method to use.")
     parser.add_argument("--model_name", type=str, default="RandomForest",
                         choices=["RandomForest",
