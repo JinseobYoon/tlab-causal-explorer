@@ -177,12 +177,20 @@ class Projector(nn.Module):
         self.backbone = None  # 초기엔 None으로 설정
 
     def build_mlp(self, in_features):
-        """동적으로 MLP를 생성하는 함수"""
-        layers = [nn.Linear(in_features, self.hidden_dims[0]), nn.ReLU()]
-        for i in range(self.hidden_layers - 1):
-            layers.append(nn.Linear(self.hidden_dims[i], self.hidden_dims[i + 1]))
+        # self.hidden_dims를 복사 후, self.hidden_layers에 맞게 길이를 조정합니다.
+        hidden_dims = list(self.hidden_dims)
+        if self.hidden_layers > len(hidden_dims):
+            # 부족한 층은 마지막 값으로 채움
+            hidden_dims.extend([hidden_dims[-1]] * (self.hidden_layers - len(hidden_dims)))
+        elif self.hidden_layers < len(hidden_dims):
+            # 필요한 만큼만 사용
+            hidden_dims = hidden_dims[:self.hidden_layers]
+
+        layers = [nn.Linear(in_features, hidden_dims[0]), nn.ReLU()]
+        for i in range(len(hidden_dims) - 1):
+            layers.append(nn.Linear(hidden_dims[i], hidden_dims[i + 1]))
             layers.append(nn.ReLU())
-        layers.append(nn.Linear(self.hidden_dims[-1], self.output_dim, bias=False))
+        layers.append(nn.Linear(hidden_dims[-1], self.output_dim, bias=False))
         return nn.Sequential(*layers)
 
     def forward(self, x, stats):

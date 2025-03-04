@@ -1,13 +1,11 @@
+import os
+
+import pandas as pd
 from darts.dataprocessing.transformers import Scaler
 from darts.models import (
     DLinearModel, NHiTSModel, NBEATSModel, NLinearModel, TCNModel,
     TSMixerModel, TiDEModel, BlockRNNModel
 )
-from darts.timeseries import TimeSeries
-
-import pandas as pd
-import os
-
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset, DataLoader
 
@@ -44,7 +42,7 @@ class Dataset_Custom(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         df_raw = pd.read_pickle(os.path.join(self.root_path,
-                                          self.data_path))
+                                             self.data_path))
 
         '''
         df_raw.columns: ['date', ...(other features), target feature]
@@ -83,13 +81,14 @@ class Dataset_Custom(Dataset):
             df_stamp['day'] = df_stamp.dt.astype(object).apply(lambda row: row.day)
             df_stamp['weekday'] = df_stamp.dt.astype(object).apply(lambda row: row.weekday())
             # df_stamp['hour'] = df_stamp.dt.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop('dt',axis=1).values
+            data_stamp = df_stamp.drop('dt', axis=1).values
         elif self.timeenc == 1:
             None
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
         self.data_stamp = data_stamp
+        self.idx_length = (border2 - border1) - 1
 
     def __getitem__(self, index):
         s_begin = index
@@ -111,44 +110,47 @@ class Dataset_Custom(Dataset):
         return self.scaler.inverse_transform(data)
 
 
-def data_provider(params_dict: dict, flag: str):
+def data_provider(args, flag: str):
+    print(flag)
+    import numpy as np
     data_dict = {
         'custom': Dataset_Custom,
     }
 
     Data = data_dict['custom']
-    timeenc = 0 if params_dict.embed != 'timeF' else 1
+    timeenc = 0 if args.embed != 'timeF' else 1
 
     if flag == 'test':
         shuffle_flag = False
         drop_last = True
         batch_size = 1
-        freq = params_dict.freq
+        freq = args.freq
     else:
         shuffle_flag = False
         drop_last = True
-        batch_size = params_dict.batch_size
-        freq = params_dict.freq
+        batch_size = args.batch_size
+        freq = args.freq
 
     data_set = Data(
-        root_path=params_dict.root_path,
-        data_path=params_dict.data_path,
+        root_path=args.root_path,
+        data_path=args.data_path,
         flag=flag,
-        size=[params_dict.seq_len, params_dict.label_len, params_dict.pred_len],
-        features=params_dict.features,
-        target=params_dict.target,
+        size=[args.seq_len, args.label_len, args.pred_len],
+        features=args.features,
+        target=args.target,
         timeenc=timeenc,
         freq=freq
     )
-    print(flag, len(data_set))
+
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,
         shuffle=shuffle_flag,
-        num_workers=params_dict.num_workers,
+        num_workers=args.num_workers,
         drop_last=drop_last)
 
     return data_set, data_loader
+
 
 class ModelFactory:
     @staticmethod
@@ -257,7 +259,8 @@ class ModelFactory:
 
 # --- Experiment Runner ---
 class ExperimentRunner:
-    def __init__(self, data: pd.DataFrame, ext_data: pd.DataFrame, target_column:str, snapshot_dt: pd.Timestamp, offset: int, horizon: int,
+    def __init__(self, data: pd.DataFrame, ext_data: pd.DataFrame, target_column: str, snapshot_dt: pd.Timestamp,
+                 offset: int, horizon: int,
                  mode: str = 'valid', input_chunk_length: int = 12, output_chunk_length: int = 6,
                  output_folder: str = './results', freq: str = 'MS', parameter_dict: dict = None):
         self.data = data
@@ -285,13 +288,11 @@ class ExperimentRunner:
         train_data, train_loader = self._get_data(flag='train')
         test_data, test_loader = self._get_data(flag='test')
 
-
         # TimeSeries 객체 생성 및 스케일링
         # train_series = TimeSeries.from_dataframe(train, time_col='dt', value_cols='v', freq=self.freq)
         # test_series = TimeSeries.from_dataframe(test, time_col='dt', value_cols='v', freq=self.freq)
         # train_series = TimeSeries.from_dataframe(train, time_col='dt', freq=self.freq)
         # test_series = TimeSeries.from_dataframe(test, time_col='dt', freq=self.freq)
-
 
         model = ModelFactory.create_model(model_name, self.input_chunk_length, self.output_chunk_length,
                                           model_params)
@@ -318,6 +319,7 @@ class ExperimentRunner:
         # else:
         #     output_file = os.path.join(self.output_folder, f'predictions_monthly_{model_name}_v3.csv')
         return predictions_df, output_file
+
     def _get_data(self, flag):
         data_set, data_loader = data_provider(self.args, flag)
         return data_set, data_loader
