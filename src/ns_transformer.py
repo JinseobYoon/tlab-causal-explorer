@@ -1,3 +1,5 @@
+from math import sqrt
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,7 +7,7 @@ import torch.nn as nn
 from src.embed import DataEmbedding
 from src.layers import Encoder, EncoderLayer, DecoderLayer, Decoder, AttentionLayer
 from src.utils import TriangularCausalMask
-from math import sqrt
+
 
 #########################################
 # DSAttiontion
@@ -53,6 +55,7 @@ class Model(nn.Module):
     """
     Non-stationary Transformer
     """
+
     def __init__(self, configs):
         super(Model, self).__init__()
         self.pred_len = configs.pred_len
@@ -106,7 +109,7 @@ class Model(nn.Module):
         )
 
         # 비정상성 보정용 projector
-        self.tau_learner   = Projector(
+        self.tau_learner = Projector(
             enc_in=configs.enc_in,
             seq_len=configs.seq_len,
             hidden_dims=configs.p_hidden_dims,
@@ -142,7 +145,7 @@ class Model(nn.Module):
 
         # 비정상성 보정
         tau = self.tau_learner(x_raw, std_enc).exp()  # [B, 1]
-        delta = self.delta_learner(x_raw, mean_enc)   # [B, seq_len]
+        delta = self.delta_learner(x_raw, mean_enc)  # [B, seq_len]
 
         # Encoder
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
@@ -177,28 +180,20 @@ class Projector(nn.Module):
         self.backbone = None  # 초기엔 None으로 설정
 
     def build_mlp(self, in_features):
-        # self.hidden_dims를 복사 후, self.hidden_layers에 맞게 길이를 조정합니다.
-        hidden_dims = list(self.hidden_dims)
-        if self.hidden_layers > len(hidden_dims):
-            # 부족한 층은 마지막 값으로 채움
-            hidden_dims.extend([hidden_dims[-1]] * (self.hidden_layers - len(hidden_dims)))
-        elif self.hidden_layers < len(hidden_dims):
-            # 필요한 만큼만 사용
-            hidden_dims = hidden_dims[:self.hidden_layers]
-
-        layers = [nn.Linear(in_features, hidden_dims[0]), nn.ReLU()]
-        for i in range(len(hidden_dims) - 1):
-            layers.append(nn.Linear(hidden_dims[i], hidden_dims[i + 1]))
+        """동적으로 MLP를 생성하는 함수"""
+        layers = [nn.Linear(in_features, self.hidden_dims[0]), nn.ReLU()]
+        for i in range(self.hidden_layers - 1):
+            layers.append(nn.Linear(self.hidden_dims[i], self.hidden_dims[i + 1]))
             layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dims[-1], self.output_dim, bias=False))
+        layers.append(nn.Linear(self.hidden_dims[-1], self.output_dim, bias=False))
         return nn.Sequential(*layers)
 
     def forward(self, x, stats):
         batch_size, seq_len, E = x.shape
 
-        x = self.series_conv(x)           # [B, 1, E]
+        x = self.series_conv(x)  # [B, 1, E]
         x = torch.cat([x, stats], dim=1)  # [B, 2, E]
-        x = x.view(batch_size, -1)        # [B, 2*E]
+        x = x.view(batch_size, -1)  # [B, 2*E]
 
         # 첫 forward 호출 시 MLP 동적으로 생성
         if self.backbone is None:
@@ -206,4 +201,3 @@ class Projector(nn.Module):
             self.backbone = self.build_mlp(in_features)
 
         return self.backbone(x)
-
