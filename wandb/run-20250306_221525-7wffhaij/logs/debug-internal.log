@@ -1,0 +1,16 @@
+{"time":"2025-03-06T22:15:25.97129+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"C:\\Users\\T-Lab_Public\\PycharmProjects\\tlab-causal-explorer\\wandb\\run-20250306_221525-7wffhaij\\logs\\debug-core.log"}
+{"time":"2025-03-06T22:15:26.0786778+09:00","level":"INFO","msg":"created new stream","id":"7wffhaij"}
+{"time":"2025-03-06T22:15:26.0786778+09:00","level":"INFO","msg":"stream: started","id":"7wffhaij"}
+{"time":"2025-03-06T22:15:26.0796818+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:15:26.0796818+09:00","level":"INFO","msg":"handler: started","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:15:26.0796818+09:00","level":"INFO","msg":"sender: started","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:15:26.3298044+09:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-03-06T22:32:58.866302+09:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-03-06T22:32:58.8668038+09:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-03-06T22:32:59.8518055+09:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-03-06T22:32:59.8699768+09:00","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"uploading history steps 4-4, summary, console lines 26-28","runtime_seconds":0.0181713}],"total_operations":1}}
+{"time":"2025-03-06T22:33:00.1723537+09:00","level":"INFO","msg":"stream: closing","id":"7wffhaij"}
+{"time":"2025-03-06T22:33:00.1723537+09:00","level":"INFO","msg":"handler: closed","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:33:00.1723537+09:00","level":"INFO","msg":"writer: Close: closed","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:33:00.1732891+09:00","level":"INFO","msg":"sender: closed","stream_id":"7wffhaij"}
+{"time":"2025-03-06T22:33:00.1732891+09:00","level":"INFO","msg":"stream: closed","id":"7wffhaij"}

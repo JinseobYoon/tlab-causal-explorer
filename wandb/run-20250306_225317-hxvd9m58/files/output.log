@@ -1,0 +1,37 @@
+Use CPU
+Training ~
+train
+val
+Epoch: 1 | Train Loss: nan | Vali Loss: nan | Time: 21.78s
+Validation loss decreased (inf --> nan).  Saving model ...
+Updating learning rate to 0.001
+Epoch: 2 | Train Loss: nan | Vali Loss: nan | Time: 21.72s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 0.0005
+Epoch: 3 | Train Loss: nan | Vali Loss: nan | Time: 21.57s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 0.00025
+Epoch: 4 | Train Loss: nan | Vali Loss: nan | Time: 21.66s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 0.000125
+Epoch: 5 | Train Loss: nan | Vali Loss: nan | Time: 21.56s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 6.25e-05
+Epoch: 6 | Train Loss: nan | Vali Loss: nan | Time: 21.60s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 3.125e-05
+Epoch: 7 | Train Loss: nan | Vali Loss: nan | Time: 21.58s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 1.5625e-05
+Epoch: 8 | Train Loss: nan | Vali Loss: nan | Time: 21.65s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 7.8125e-06
+Epoch: 9 | Train Loss: nan | Vali Loss: nan | Time: 21.65s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 3.90625e-06
+Epoch: 10 | Train Loss: nan | Vali Loss: nan | Time: 21.59s
+Validation loss decreased (nan --> nan).  Saving model ...
+Updating learning rate to 1.953125e-06
+Testing ~
+test
+mape:nan, mae:nan

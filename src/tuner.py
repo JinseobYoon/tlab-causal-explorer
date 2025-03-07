@@ -128,7 +128,7 @@ if __name__ == "__main__":
     base_config = {
         "data": "custom",
         "model": "NSTransformer",
-        "root_path": "/Users/tony/Desktop/Project/tlab-causal-explorer/tlab-causal-explorer/input/",
+        "root_path": "C:/Users/T-Lab_Public/PycharmProjects/tlab-causal-explorer/input/",
         "data_path": "gold_spot_price.pkl.bz2",
         "features": "MS",
         "target": "Com_Gold",

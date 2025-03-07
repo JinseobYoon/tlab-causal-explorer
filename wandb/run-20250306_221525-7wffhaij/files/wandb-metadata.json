@@ -1,0 +1,48 @@
+{
+  "os":  "Windows-11-10.0.22631-SP0",
+  "python":  "CPython 3.12.9",
+  "startedAt":  "2025-03-06T13:15:25.969823Z",
+  "program":  "C:\\Users\\T-Lab_Public\\PycharmProjects\\tlab-causal-explorer\\run.py",
+  "codePath":  "run.py",
+  "git":  {
+    "remote":  "https://github.com/JinseobYoon/tlab-causal-explorer.git",
+    "commit":  "e3a10afee0b346329b832eb20eb7e78db7b7c8fc"
+  },
+  "email":  "22100733@handong.ac.kr",
+  "root":  "C:\\Users\\T-Lab_Public\\PycharmProjects\\tlab-causal-explorer",
+  "host":  "DESKTOP-199PROL",
+  "executable":  "C:\\Users\\T-Lab_Public\\PycharmProjects\\tlab-causal-explorer\\.venv\\Scripts\\python.exe",
+  "codePathLocal":  "run.py",
+  "cpu_count":  24,
+  "cpu_count_logical":  32,
+  "gpu":  "NVIDIA RTX A5000",
+  "gpu_count":  2,
+  "disk":  {
+    "/":  {
+      "total":  "1999462100992",
+      "used":  "742939709440"
+    }
+  },
+  "memory":  {
+    "total":  "137242648576"
+  },
+  "cpu":  {
+    "count":  24,
+    "countLogical":  32
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA RTX A5000",
+      "memoryTotal":  "25757220864",
+      "cudaCores":  8192,
+      "architecture":  "Ampere"
+    },
+    {
+      "name":  "NVIDIA RTX A5000",
+      "memoryTotal":  "25757220864",
+      "cudaCores":  8192,
+      "architecture":  "Ampere"
+    }
+  ],
+  "cudaVersion":  "12.6"
+}

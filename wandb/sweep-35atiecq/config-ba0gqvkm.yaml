@@ -1,0 +1,14 @@
+wandb_version: 1
+
+activation:
+  value: gelu
+batch_size:
+  value: 16
+d_model:
+  value: 1024
+dropout:
+  value: 0.16688274723441182
+learning_rate:
+  value: 0.0001
+n_heads:
+  value: 4

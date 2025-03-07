@@ -1,0 +1,29 @@
+Use CPU
+Training ~
+train
+val
+	iters: 100, epoch: 1 | loss: 668.9444580
+	speed: 1.9340s/iter; left time: 2593.4804s
+Epoch: 1 | Train Loss: 11600.8897406 | Vali Loss: 9745.3708872 | Time: 246.19s
+Validation loss decreased (inf --> 9745.370887).  Saving model ...
+Updating learning rate to 0.0001
+	iters: 100, epoch: 2 | loss: 5588.4111328
+	speed: 2.5227s/iter; left time: 3019.7260s
+Epoch: 2 | Train Loss: 10453.1740379 | Vali Loss: 28897.2508827 | Time: 254.57s
+EarlyStopping counter: 1 out of 3
+Updating learning rate to 5e-05
+	iters: 100, epoch: 3 | loss: 5319.7026367
+	speed: 2.7076s/iter; left time: 2851.1407s
+Epoch: 3 | Train Loss: 8958.2461925 | Vali Loss: 14360.2375113 | Time: 271.07s
+EarlyStopping counter: 2 out of 3
+Updating learning rate to 2.5e-05
+	iters: 100, epoch: 4 | loss: 4680.3095703
+	speed: 2.7233s/iter; left time: 2475.5182s
+Epoch: 4 | Train Loss: 8086.6757473 | Vali Loss: 16111.0036245 | Time: 272.50s
+EarlyStopping counter: 3 out of 3
+Early stopping
+Testing ~
+test
+C:\Users\T-Lab_Public\PycharmProjects\tlab-causal-explorer\src\utils.py:142: RuntimeWarning: More than 20 figures have been opened. Figures created through the pyplot interface (`matplotlib.pyplot.figure`) are retained until explicitly closed and may consume too much memory. (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`.
+  plt.figure()
+mape:0.06904685497283936, mae:170.68505859375

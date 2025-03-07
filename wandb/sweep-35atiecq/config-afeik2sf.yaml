@@ -1,0 +1,14 @@
+wandb_version: 1
+
+activation:
+  value: relu
+batch_size:
+  value: 16
+d_model:
+  value: 128
+dropout:
+  value: 0.4460999018046457
+learning_rate:
+  value: 0.0001
+n_heads:
+  value: 8
