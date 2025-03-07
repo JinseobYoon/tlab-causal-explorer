@@ -22,25 +22,22 @@ if __name__ == '__main__':
 
     base_path = os.getcwd()
     parameter_path = join(base_path, args.parameter_file)
-    parameter_dict = load_json(parameter_path)
-    parameter_dict['init_time'] = start_time
+    base_config = load_json(parameter_path)
+    base_config['init_time'] = start_time
 
-    select_method = parameter_dict['select_method']
-    model_name = parameter_dict['model']
-    target = parameter_dict['target']
+    select_method = base_config['select_method']
+    model_name = base_config['model']
+    target = base_config['target']
 
     # Load and preprocess data
     data = pd.read_pickle(os.path.join(base_path, "input", "gold_spot_price.pkl.bz2"))
     data.dropna(axis=0, how='any', inplace=True)
     data = data.apply(pd.to_numeric, errors='coerce')
-    # X, y = data.drop(target, axis=1), data[target]
 
-    # Feature selection
-    # selector = FeatureSelector(data=data,
-    #                            target_col=target,
-    #                            method=select_method)
-    # features = selector.select_features()
-
-    exp = ExpMain(parameter_dict)
+    ## 수정
+    exp = ExpMain(base_config)
     model = exp.train(setting=join(model_name, select_method, start_time))  # 학습 실행
     exp.test(setting=join(model_name, select_method, start_time))
+
+
+
