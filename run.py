@@ -34,7 +34,7 @@ if __name__ == '__main__':
     data.dropna(axis=0, how='any', inplace=True)
     data = data.apply(pd.to_numeric, errors='coerce')
 
-    ## 수정
+    ## 수정 ##
     exp = ExpMain(base_config)
     model = exp.train(setting=join(model_name, select_method, start_time))  # 학습 실행
     exp.test(setting=join(model_name, select_method, start_time))
