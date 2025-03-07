@@ -1,6 +1,8 @@
-import torch.nn as nn
-import torch
 import math
+
+import torch
+import torch.nn as nn
+
 
 #########################################
 # Data Embedding
@@ -109,4 +111,3 @@ class DataEmbedding(nn.Module):
     def forward(self, x, x_mark):
         x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)
-

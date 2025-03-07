@@ -10,7 +10,6 @@ from torch import optim
 from src.ns_transformer import Model
 from src.runner import data_provider
 from src.utils import metric, visual, EarlyStopping
-
 import wandb
 
 class ExpMain(object):
@@ -73,8 +72,8 @@ class ExpMain(object):
 
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
+        print("train_data :", len(train_data))
         vali_data, vali_loader = self._get_data(flag='val')
-
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
@@ -180,14 +179,13 @@ class ExpMain(object):
             print(f"Epoch: {epoch + 1} | Train Loss: {avg_train_loss:.7f} | Vali Loss: {avg_vali_loss:.7f} | Time: {epoch_duration:.2f}s")
 
             early_stopping(avg_vali_loss, self.model, path)
+
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
             self.adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = os.path.join(path, 'checkpoint.pth')
-        self.model.load_state_dict(torch.load(best_model_path))
         return self.model
 
     def test(self, setting, test=0):
@@ -281,5 +279,3 @@ class ExpMain(object):
         np.save(folder_path + 'true.npy', trues)
 
         return
-
-

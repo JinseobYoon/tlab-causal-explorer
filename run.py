@@ -9,6 +9,7 @@ from src.utils import load_json
 import json
 import wandb
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Run feature selection and model evaluation.")
     parser.add_argument("--parameter-file", type=str, default="parameters.jsonl")
@@ -55,7 +56,6 @@ def train_sweep():
     exp = ExpMain(base_config)
     model = exp.train(setting=join(model_name, select_method, start_time))
     exp.test(setting=join(model_name, select_method, start_time))
-
     wandb.finish()
 
 # ✅ Sweep 실행
