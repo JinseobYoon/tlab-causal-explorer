@@ -1,0 +1,25 @@
+Use CPU
+Training ~
+train
+val
+Epoch: 1 | Train Loss: 10945.8642239 | Vali Loss: 22995.9857585 | Time: 44.71s
+Validation loss decreased (inf --> 22995.985758).  Saving model ...
+Updating learning rate to 0.0001
+Epoch: 2 | Train Loss: 9527.2630836 | Vali Loss: 20206.3841960 | Time: 50.19s
+Validation loss decreased (22995.985758 --> 20206.384196).  Saving model ...
+Updating learning rate to 5e-05
+Epoch: 3 | Train Loss: 8953.1041497 | Vali Loss: 11386.8932292 | Time: 49.66s
+Validation loss decreased (20206.384196 --> 11386.893229).  Saving model ...
+Updating learning rate to 2.5e-05
+Epoch: 4 | Train Loss: 9178.1673855 | Vali Loss: 12006.6767578 | Time: 49.60s
+EarlyStopping counter: 1 out of 3
+Updating learning rate to 1.25e-05
+Epoch: 5 | Train Loss: 7516.4692383 | Vali Loss: 12684.7822266 | Time: 49.68s
+EarlyStopping counter: 2 out of 3
+Updating learning rate to 6.25e-06
+Epoch: 6 | Train Loss: 7229.1595256 | Vali Loss: 13301.9417318 | Time: 49.50s
+EarlyStopping counter: 3 out of 3
+Early stopping
+Testing ~
+test
+mape:0.05144773796200752, mae:125.98430633544922

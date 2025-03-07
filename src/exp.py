@@ -9,9 +9,8 @@ from torch import optim
 
 from src.ns_transformer import Model
 from src.runner import data_provider
-from src.utils import EarlyStopping
-from src.utils import metric, visual
-
+from src.utils import metric, visual, EarlyStopping
+import wandb
 
 class ExpMain(object):
     def __init__(self, args):
@@ -71,61 +70,16 @@ class ExpMain(object):
         criterion = nn.MSELoss()
         return criterion
 
-    def vali(self, vali_data, vali_loader, criterion):
-        total_loss = []
-        self.model.eval()
-        with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float()
-
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-
-                pred = outputs.detach().cpu()
-                true = batch_y.detach().cpu()
-
-                loss = criterion(pred, true)
-
-                total_loss.append(loss)
-        total_loss = np.average(total_loss)
-        self.model.train()
-        return total_loss
-
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
         print("train_data :", len(train_data))
         vali_data, vali_loader = self._get_data(flag='val')
-        print("vali_data :", len(vali_data))
-        test_data, test_loader = self._get_data(flag='test')
-        print("test_data :", len(test_data))
-
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
 
         time_now = time.time()
-
-        train_steps = len(train_loader)  # batch 개수를 저장
+        train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
 
         model_optim = self._select_optimizer()
@@ -137,43 +91,35 @@ class ExpMain(object):
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
-
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):  # 하나의 Batch씩 데이터를 불러옴
+
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
 
-                batch_x = batch_x.float().to(self.device)  # batch_x -> batch 안에 있는 각 sample의 입력값(sequence_length)
-                batch_y = batch_y.float().to(self.device)  # batch_y -> batch 안에 있는 pred의 실제값(pred_length)
-
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()  # batch_y에 대한 예측
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(
-                    self.device)  # label_len 만큼 데이터를 앞에 붙여 사용
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                         if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                        f_dim = -1 if self.args.features == 'MS' else 0  ### output은 시점이 겹치는 경우 어떻게 처리하는가? -> 최신 예측값 사용용
+                            outputs = outputs[0]
+                        f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
                         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
+                        outputs = outputs[0]
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -181,14 +127,13 @@ class ExpMain(object):
                     train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                    print(f"\titers: {i + 1}, epoch: {epoch + 1} | loss: {loss.item():.7f}")
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    print(f'\tspeed: {speed:.4f}s/iter; left time: {left_time:.4f}s')
                     iter_count = 0
                     time_now = time.time()
 
-                # 역전파 및 가중치 업데이트
                 if self.args.use_amp:
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
@@ -197,23 +142,49 @@ class ExpMain(object):
                     loss.backward()
                     model_optim.step()
 
-            # 조기 종료 및 학습률 조정
-            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
-            train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            epoch_duration = time.time() - epoch_time
+            avg_train_loss = np.average(train_loss)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
-            early_stopping(vali_loss, self.model, path)
+            # Validation 수행
+            self.model.eval()
+            vali_loss = []
+            with torch.no_grad():
+                for batch_x, batch_y, batch_x_mark, batch_y_mark in vali_loader:
+                    batch_x = batch_x.float().to(self.device)
+                    batch_y = batch_y.float().to(self.device)
+                    batch_x_mark = batch_x_mark.float().to(self.device)
+                    batch_y_mark = batch_y_mark.float().to(self.device)
+
+                    dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                    dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+
+                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    if self.args.output_attention:
+                        outputs = outputs[0]
+                    f_dim = -1 if self.args.features == 'MS' else 0
+                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
+                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                    loss = criterion(outputs, batch_y)
+                    vali_loss.append(loss.item())
+
+            avg_vali_loss = np.average(vali_loss)
+
+            # ✅ Loss 기록 (Train & Validation Loss)
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_vali_loss
+            })
+
+            print(f"Epoch: {epoch + 1} | Train Loss: {avg_train_loss:.7f} | Vali Loss: {avg_vali_loss:.7f} | Time: {epoch_duration:.2f}s")
+
+            early_stopping(avg_vali_loss, self.model, path)
+
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
             self.adjust_learning_rate(model_optim, epoch + 1, self.args)
-
-        best_model_path = path + '/' + 'checkpoint.pth'
-        self.model.load_state_dict(torch.load(best_model_path))
 
         return self.model
 
@@ -222,6 +193,7 @@ class ExpMain(object):
         if test:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
 
         preds = []
         trues = []
@@ -284,6 +256,16 @@ class ExpMain(object):
             os.makedirs(folder_path)
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
+
+        # ✅ Wandb에 테스트 성능 저장
+        wandb.log({
+            "test_mae": mae,
+            "test_mse": mse,
+            "test_rmse": rmse,
+            "test_mape": mape,
+            "test_mspe": mspe
+        })
+
         print('mape:{}, mae:{}'.format(mape, mae))
         f = open("result.txt", 'a')
         f.write(setting + "  \n")
