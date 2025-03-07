@@ -25,17 +25,18 @@ class FeatureSelector:
     def __init__(self, data, target_col, method="CFS"):
         self.data = data
         self.target_col = target_col
-
         self.method = method
 
-    def _select_features_correlation(self, threshold=0.1):
+    def _select_features_lasso(self, threshold=0.1):
         data = self.data
-        return data
+        features = list()
+        return features
 
-    def _select_features_pc(self, threshold=0.1):
+    def _select_features_var(self, threshold=0.1):
         results = pd.DataFrame()
+        features = list()
 
-        return results
+        return features
 
     def _select_features_pcmci(self, threshold=0.1):
         import time
@@ -104,17 +105,26 @@ class FeatureSelector:
     def _select_features_nbcb(self, threshold=0.1):
         data = self.data
         # correlations = X.corrwith(y)
-        return data
+        features = list()
+        return features
+
+    def _select_features_lingam(self, threshold=0.1):
+        data = self.data
+        # correlations = X.corrwith(y)
+        features = list()
+        return features
 
     def select_features(self):
-        if self.method == "Correlation":
-            return self._select_features_correlation()
-        elif self.method == "PC":
-            return self._select_features_pc()
-        elif self.method == "PCMCI":
-            return self._select_features_pcmci()
+        # TODO Implement Lasso, VAR,  VARLiNGAM, NBCB
+        # TODO modify PCMCIPlUS
+        if self.method == "Lasso":
+            return self._select_features_lasso()
+        elif self.method == "VAR":
+            return self._select_features_var()
         elif self.method == "PCMCIPlUS":
             return self._select_features_pcmciplus()
+        elif self.method == "VARLiNGAM":
+            return self._select_features_lingam()
         elif self.method == "NBCB":
             return self._select_features_nbcb()
         else:
