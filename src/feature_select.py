@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def extract_significant_links(p_matrix, val_matrix, dataframe, target_col, alpha=0.05):
@@ -108,11 +109,47 @@ class FeatureSelector:
         features = list()
         return features
 
-    def _select_features_lingam(self, threshold=0.1):
-        data = self.data
-        # correlations = X.corrwith(y)
-        features = list()
-        return features
+    #####################수정#####################
+    def _select_features_varlingam(self, threshold=0.01):
+        from lingam import VARLiNGAM
+        import time
+
+        start = time.time()
+        data= self.data
+
+        model = VARLiNGAM()
+        model.fit(data.values)
+
+        adjacency_mats = model.adjacency_matrices_ #P_value는 구할 수 없는건가?
+
+        var_names = list(data.columns)
+        rows = []
+
+        for lag, mat in enumerate(adjacency_mats, start=1):
+            n = mat.shape[0]
+            for i in range(n): #Effect (결과 변수)
+                for j in range(n): #Cause (원인 변수)
+                    effect = mat[i, j]
+                    if abs(effect) > threshold:
+                        rows.append({
+                            "from": f"{var_names[j]}(t-{lag})",
+                            "to": f"{var_names[i]}(t)",
+                            "effect": effect,
+                        })
+
+        # 3) DataFrame으로 반환
+        df = pd.DataFrame(rows, columns=["from", "to", "effect"])
+
+        #Com_Gold에 영향을 주는 변수 필터링
+        df_com_gold = df[df["to"] == "Com_Gold(t)"]
+
+        end = time.time()
+        print(f"{self.method} : {end - start} seconds")
+
+        return df_com_gold
+
+
+    #####################수정#####################
 
     def select_features(self):
         # TODO Implement Lasso, VAR,  VARLiNGAM, NBCB
@@ -121,10 +158,10 @@ class FeatureSelector:
             return self._select_features_lasso()
         elif self.method == "VAR":
             return self._select_features_var()
-        elif self.method == "PCMCIPlUS":
+        elif self.method == "PCMCIPlUS": #PCMCI, PCMCI+ 구현 완료
             return self._select_features_pcmciplus()
         elif self.method == "VARLiNGAM":
-            return self._select_features_lingam()
+            return self._select_features_varlingam()
         elif self.method == "NBCB":
             return self._select_features_nbcb()
         else:

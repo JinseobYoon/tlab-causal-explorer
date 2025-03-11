@@ -77,11 +77,11 @@ if __name__ == '__main__':
     feature_set = selector.select_features()
 
     # ✅ Sweep 설정 파일에서 불러오기
-    with open("sweep_config.jsonl", "r") as f:
-        sweep_config = json.load(f)
+    #with open("sweep_config.jsonl", "r") as f:
+    #    sweep_config = json.load(f)
 
     # ✅ Sweep 등록
-    sweep_id = wandb.sweep(sweep_config, project="NSTransformer_Experiments")
+    #sweep_id = wandb.sweep(sweep_config, project="NSTransformer_Experiments")
 
     # ✅ Sweep 실행
-    wandb.agent(sweep_id, function=train_sweep, count=10)
+    #wandb.agent(sweep_id, function=train_sweep, count=10)
