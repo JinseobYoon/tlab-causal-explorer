@@ -9,18 +9,34 @@ from src.utils import load_json
 import json
 import wandb
 
+import random
+import numpy as np
+import torch
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run feature selection and model evaluation.")
     parser.add_argument("--parameter-file", type=str, default="parameters.jsonl")
     return parser.parse_args()
 
+# 기존 base_config 불러오기
+args = parse_args()
+start_time = datetime.datetime.now().strftime("%Y%m%d%H%M")
+base_path = os.getcwd()
+parameter_path = join(base_path, args.parameter_file)
+base_config = load_json(parameter_path)
+base_config['init_time'] = start_time
+
+fix_seed = base_config['seed']
+random.seed(fix_seed)
+torch.manual_seed(fix_seed)
+np.random.seed(fix_seed)
+
 # ✅ Sweep 설정 파일에서 불러오기
 with open("sweep_config.jsonl", "r") as f:
     sweep_config = json.load(f)
 
 # ✅ Sweep 등록
-sweep_id = wandb.sweep(sweep_config, project="NSTransformer_Experiments")
+sweep_id = wandb.sweep(sweep_config, project="NST_visual")
 
 # ✅ Wandb Sweep을 실행할 train 함수
 def train_sweep():
@@ -28,14 +44,6 @@ def train_sweep():
 
     # Wandb에서 설정된 하이퍼파라미터 가져오기
     config = wandb.config
-
-    # 기존 base_config 불러오기
-    args = parse_args()
-    start_time = datetime.datetime.now().strftime("%Y%m%d%H%M")
-    base_path = os.getcwd()
-    parameter_path = join(base_path, args.parameter_file)
-    base_config = load_json(parameter_path)
-    base_config['init_time'] = start_time
 
     # ✅ Wandb 설정값으로 base_config 업데이트
     base_config.update({

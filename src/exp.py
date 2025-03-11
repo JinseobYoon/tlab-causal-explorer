@@ -11,6 +11,7 @@ from src.ns_transformer import Model
 from src.runner import data_provider
 from src.utils import metric, visual, EarlyStopping
 import wandb
+import matplotlib.pyplot as plt
 
 class ExpMain(object):
     def __init__(self, args):
@@ -18,6 +19,7 @@ class ExpMain(object):
             self.args = SimpleNamespace(**args)  # Convert dict to object-like namespace
         else:
             self.args = args  # Assume it's already an object
+
         self.device = self._acquire_device()
         self.model = self._build_model().to(self.device)
 
@@ -202,6 +204,8 @@ class ExpMain(object):
             os.makedirs(folder_path)
 
         self.model.eval()
+        last_i = len(test_loader) - 1  # 마지막 배치 index
+
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
@@ -236,14 +240,48 @@ class ExpMain(object):
                 pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
                 true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
 
-                preds.append(pred)
-                trues.append(true)
+                # pred와 true의 shape이 (1, 90, 1) 즉, (batch_size=1, seq_len=90, feature_dim=1)
+                batch_size, seq_len, feature_dim = pred.shape  # (1, 90, 1)
 
-                if i % 20 == 0:
+                # 3D -> 2D 변환 (reshape)
+                pred_reshaped = pred.reshape(seq_len, feature_dim)  # (90, 1)
+                true_reshaped = true.reshape(seq_len, feature_dim)  # (90, 1)
+
+                # 역변환 (inverse transform)
+                pred_original = test_data.inverse_transform(pred_reshaped)  # (90, 1)
+                true_original = test_data.inverse_transform(true_reshaped)  # (90, 1)
+
+                # 다시 3D로 변환 (원래 차원 복원)
+                pred_original = pred_original.reshape(batch_size, seq_len, feature_dim)  # (1, 90, 1)
+
+                true_original = true_original.reshape(batch_size, seq_len, feature_dim)  # (1, 90, 1)
+
+                preds.append(pred_original)
+                trues.append(true_original)
+
+                if i == last_i:
                     input = batch_x.detach().cpu().numpy()
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                    input_y = input[0, :, -1].reshape(-1, 1)
+                    input_original = test_data.inverse_transform(input_y)
+                    input_original = input_original.reshape(-1)
+
+                    gt = np.concatenate((input_original, true_original[0, :, -1]), axis=0)
+                    pd = np.concatenate((input_original, pred_original[0, :, -1]), axis=0)
+
+                    # Matplotlib으로 시각화
+                    plt.figure(figsize=(10, 5))
+                    plt.plot(gt, label="Ground Truth", color="blue")
+                    plt.plot(pd, label="Prediction", color="red")
+                    plt.legend()
+                    plt.title("Prediction vs Ground Truth")
+
+                    # 파일 저장
+                    img_path = os.path.join(folder_path, "final_batch_visualization.png")
+                    plt.savefig(img_path)
+                    plt.close()
+
+                    # ✅ WandB에 이미지 업로드
+                    wandb.log({"Final Batch Visualization": wandb.Image(img_path)})
 
         preds = np.array(preds)
         trues = np.array(trues)

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=False, timeenc=0, freq='b'):
+                 target='OT', scale=True, timeenc=0, freq='b'):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -36,6 +36,7 @@ class Dataset_Custom(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
+        self.scaler_y = StandardScaler() # ✅ y를 위한 scaler 생성
         df_raw = pd.read_pickle(os.path.join(self.root_path,
                                              self.data_path))
 
@@ -56,6 +57,9 @@ class Dataset_Custom(Dataset):
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
+        df_data = df_raw[cols] # ✅ 전체 feature에 대한 데이터
+        df_target = df_raw[[self.target]]  # ✅ y 값만 있는 데이터
+
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
@@ -64,8 +68,13 @@ class Dataset_Custom(Dataset):
 
         if self.scale:
             train_data = df_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
+            train_target = df_target[border1s[0]:border2s[0]]
+
+            self.scaler.fit(train_data.values)  # ✅ 전체 feature scaling
+            self.scaler_y.fit(train_target.values)  # ✅ y 값만 scaling
+
             data = self.scaler.transform(df_data.values)
+            # data_y = self.scaler_y.transform(df_target.values)  # ✅ y 값만 따로 scaling
         else:
             data = df_data.values
 
@@ -101,7 +110,7 @@ class Dataset_Custom(Dataset):
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
-        return self.scaler.inverse_transform(data)
+        return self.scaler_y.inverse_transform(data)
 
 
 def data_provider(params_dict: dict, flag: str):
