@@ -6,23 +6,41 @@
   },
   "parameters": {
     "learning_rate": {
-      "values": [0.0001, 0.001, 0.01]
+      "values": [0.0001, 0.0005, 0.001]
     },
     "batch_size": {
       "values": [16, 32, 64]
     },
     "d_model": {
-      "values": [128, 256, 512, 1024]
+      "values": [256, 512, 1024]
     },
     "n_heads": {
-      "values": [2, 4, 8, 16]
+      "values": [4, 8, 16]
     },
     "dropout": {
-      "min": 0.0,
-      "max": 0.5
+      "min": 0.01,
+      "max": 0.1
     },
-    "activation": {
-      "values": ["relu", "gelu"]
+    "seq_len": {
+      "values": [90, 180]
+    },
+    "label_len": {
+      "values": [30, 45, 60]
+    },
+    "pred_len": {
+      "values": [90]
+    },
+    "lradj": {
+      "values": ["type1", "type2"]
+    },
+    "e_layers": {
+      "values": [2, 3, 4]
+    },
+    "d_layers": {
+      "values": [1, 2]
+    },
+    "factor": {
+      "values": [1, 3, 5]
     }
   }
 }

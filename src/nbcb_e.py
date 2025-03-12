@@ -1,9 +1,9 @@
 import random
 import pandas as pd
 import numpy as np
-
 from sklearn.linear_model import LinearRegression as lr
-from pcgce import CITCE
+
+from src.pcgce import CITCE
 from causallearn.graph.Edge import Edge
 from causallearn.graph.Endpoint import Endpoint
 from causallearn.graph.GeneralGraph import GeneralGraph
@@ -12,7 +12,6 @@ from lingam.var_lingam import VARLiNGAM
 from lingam.resit import RESIT
 import matplotlib.pyplot as plt
 
-
 def run_varlingam(data, tau_max):
     model = VARLiNGAM(lags=tau_max, criterion='bic', prune=False)
     model.fit(data)
@@ -20,19 +19,19 @@ def run_varlingam(data, tau_max):
     order = [data.columns[i] for i in order]
     order.reverse()
 
-    order_matrix = pd.DataFrame(np.zeros([data.shape[1], data.shape[1]]), columns=data.columns, index=data.columns, dtype=int)
+    order_matrix = pd.DataFrame(np.zeros([data.shape[1], data.shape[1]]),
+                                columns=data.columns, index=data.columns, dtype=int)
     for col_i in order_matrix.index:
         for col_j in order_matrix.columns:
             if col_i != col_j:
                 index_i = order.index(col_i)
                 index_j = order.index(col_j)
                 if index_i > index_j:
-                    order_matrix[col_j].loc[col_i] = 2
-                    order_matrix[col_i].loc[col_j] = 1
+                    order_matrix.loc[col_i, col_j] = 2
+                    order_matrix.loc[col_j, col_i] = 1
     return order_matrix
 
 def run_resit(data):
-    from sklearn.ensemble import RandomForestRegressor
     from sklearn.gaussian_process import GaussianProcessRegressor
     reg = GaussianProcessRegressor()
     model = RESIT(regressor=reg)
@@ -41,29 +40,35 @@ def run_resit(data):
     order = [data.columns[i] for i in order]
     order.reverse()
 
-    order_matrix = pd.DataFrame(np.zeros([data.shape[1], data.shape[1]]), columns=data.columns, index=data.columns, dtype=int)
+    order_matrix = pd.DataFrame(np.zeros([data.shape[1], data.shape[1]]),
+                                columns=data.columns, index=data.columns, dtype=int)
     for col_i in order_matrix.index:
         for col_j in order_matrix.columns:
             if col_i != col_j:
                 index_i = order.index(col_i)
                 index_j = order.index(col_j)
                 if index_i > index_j:
-                    order_matrix[col_j].loc[col_i] = 2
-                    order_matrix[col_i].loc[col_j] = 1
+                    order_matrix.loc[col_i, col_j] = 2
+                    order_matrix.loc[col_j, col_i] = 1
     return order_matrix
 
-
 class NBCBe:
-    def __init__(self, data, tau_max, sig_level, linear=True, model="linear",  indtest="linear", cond_indtest="linear"):
+    """
+    NBCB_e 모델:
+      - noise-based 단계: VARLiNGAM (또는 RESIT)으로 인과 순서를 결정
+      - constraint-based 단계: tigramite의 JPCMCIplus(PCMCI+)를 이용해 인과 그래프의 skeleton을 추론
+    최종적으로 causal_graph와 window_causal_graph_dict에 결과를 저장합니다.
+    """
+    def __init__(self, data, tau_max, sig_level, linear=True, model="linear", indtest="linear", cond_indtest="linear"):
         self.data = data
         self.tau_max = tau_max
         self.sig_level = sig_level
         self.linear = linear
-        self.model =model
+        self.model = model
         self.indtest = indtest
         self.cond_indtest = cond_indtest
 
-        self.causal_order_ = None
+        self.causal_order = None
         self.graph = []
         self.forbidden_orientation = []
         self.window_causal_graph_dict = dict()
@@ -80,132 +85,74 @@ class NBCBe:
             self.causal_order = run_resit(self.data)
         print("Causal Order:\n", self.causal_order)
         list_columns = list(self.causal_order.columns)
+        # 원래 조건: self.causal_order[col_j].loc[col_i]==2 and self.causal_order[col_i].loc[col_j]==1
+        # 이를 .loc로 수정하여:
         for col_i in list_columns:
             for col_j in list_columns:
-                if (self.causal_order[col_j].loc[col_i] == 2) and (self.causal_order[col_i].loc[col_j] == 1):
+                if (self.causal_order.loc[col_j, col_i] == 2) and (self.causal_order.loc[col_i, col_j] == 1):
                     self.forbidden_orientation.append((list_columns.index(col_j), list_columns.index(col_i)))
 
     def constraint_based(self, bk=True):
-        pcgce = CITCE(self.data, sig_lev=self.sig_level, lag_max=self.tau_max, order=self.causal_order,
-                      linear=self.linear)
-        pcgce.skeleton_initialize()
-        pcgce.find_sep_set()
-        output = pcgce.graph.to_summary()
-        # else:
-        #     pcmci = PCMCI(dataframe=dataframe, cond_ind_test=parcorr, verbosity=0)
-        #     output = pcmci.run_pcmciplus(tau_min=0, tau_max=self.tau_max, pc_alpha=self.sig_level)
+        from tigramite import data_processing as pp
+        from tigramite.independence_tests.parcorr import ParCorr
+        from tigramite.jpcmciplus import JPCMCIplus
 
-        summary_matrix = pd.DataFrame(np.zeros([self.data.shape[1], self.data.shape[1]]), columns=self.data.columns,
-                                      index=self.data.columns)
+        dataframe = pp.DataFrame(self.data.values, var_names=list(self.data.columns))
+        ind_test = ParCorr(significance='analytic')
+        N = self.data.shape[1]
+        node_classification = {i: "system" for i in range(N)}
 
-        for edge in output.edges:
-            col_i = edge[0]
-            col_j = edge[1]
-            summary_matrix[col_j].loc[col_i] = 1
+        jpcmci_plus = JPCMCIplus(
+            dataframe=dataframe,
+            cond_ind_test=ind_test,
+            node_classification=node_classification
+        )
+
+        results_plus = jpcmci_plus.run_pcmciplus(tau_max=self.tau_max)
+
+        jpcmci_plus.print_significant_links(
+            p_matrix=results_plus['p_matrix'],
+            val_matrix=results_plus['val_matrix'],
+            alpha_level=self.sig_level
+        )
+
+        summary_matrix = pd.DataFrame(
+            np.zeros([N, N]),
+            columns=self.data.columns,
+            index=self.data.columns
+        )
+        for i in range(N):
+            for j in range(N):
+                for tau in range(0, self.tau_max + 1):
+                    if results_plus["graph"][i, j, tau] == '-->':
+                        summary_matrix.loc[self.data.columns[i], self.data.columns[j]] = 1
+                    elif results_plus["graph"][i, j, tau] == '<--':
+                        summary_matrix.loc[self.data.columns[j], self.data.columns[i]] = 1
 
         for col_i in self.data.columns:
             for col_j in self.data.columns:
-                if (summary_matrix[col_j].loc[col_i] == 1) and (summary_matrix[col_i].loc[col_j] == 1):
+                if (summary_matrix.loc[col_i, col_j] == 1) and (summary_matrix.loc[col_j, col_i] == 1):
                     if (not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j))) and \
-                            (not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i))):
+                       (not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i))):
                         self.causal_graph.add_edge(
                             Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.ARROW, Endpoint.ARROW))
-                elif summary_matrix[col_j].loc[col_i] == 1:
+                elif summary_matrix.loc[col_i, col_j] == 1:
                     if not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j)):
                         self.causal_graph.add_edge(
                             Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.TAIL, Endpoint.ARROW))
-                elif summary_matrix[col_i].loc[col_j] == 1:
+                elif summary_matrix.loc[col_j, col_i] == 1:
                     if not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i)):
                         self.causal_graph.add_edge(
                             Edge(GraphNode(col_j), GraphNode(col_i), Endpoint.TAIL, Endpoint.ARROW))
+
+        for edge in self.causal_graph.get_edges():
+            cause = edge.get_node1().get_name() if edge.get_endpoint1().name == "TAIL" else edge.get_node2().get_name()
+            effect = edge.get_node2().get_name() if edge.get_endpoint2().name == "ARROW" else edge.get_node1().get_name()
+            self.window_causal_graph_dict[effect].append((cause, 0))
 
     def run(self):
         print("######## Running Noise-based step ########")
         self.noise_based()
         print("######## Running Constraint-based step ########")
         self.constraint_based()
-
-
-def uniform_with_gap(min_value=-1, max_value=1, min_gap=-0.5, max_gap=0.5):
-    while True:
-        r = random.uniform(min_value, max_value)
-        if min_gap>r or max_gap<r:
-            break
-    return r
-
-
-def v_structure_generator(T=1000, seed=0, verbose=False):
-    T = T+2
-    random.seed(seed)
-    ax = uniform_with_gap()
-    ay = uniform_with_gap()
-    aw = uniform_with_gap()
-    axw = uniform_with_gap()
-    ayw = uniform_with_gap()
-    bx = 0.3
-    by = 0.3
-    bw = 0.3
-
-    if verbose:
-        print("V-structure: 0 -> 2 <- 1")
-        print(ax, bx, ay,by, aw, bw, axw, ayw)
-    epsx = np.random.uniform(0, 1, T)
-    epsy = np.random.uniform(0, 1, T)
-    epsw = np.random.uniform(0, 1, T)
-
-    x = np.zeros([T])
-    y = np.zeros([T])
-    w = np.zeros([T])
-
-    x[0] = bx * epsx[0]
-    y[0] = by * epsy[0]
-    x[1] = ax * x[0] + bx * epsx[1]
-    y[1] = ay * y[0] + by * epsy[1]
-    x[2] = ax * x[1] + bx * epsx[2]
-    y[2] = ay * y[1] + by * epsy[2]
-    w[2] = aw * w[1] + axw * x[2] + ayw * y[2] + bw * epsw[2]
-    for i in range(3, T):
-        x[i] = ax * x[i - 1] - 0.8 * y[i] + bx * epsx[i]
-        y[i] = ay * y[i - 1] + by * epsy[i]
-        w[i] = aw * w[i - 1] + axw * x[i] + ayw * y[i] + bw * epsw[i]
-
-    x = pd.DataFrame(x, columns=["V1"])
-    y = pd.DataFrame(y, columns=["V2"])
-    w = pd.DataFrame(w, columns=["V3"])
-
-    series = pd.concat([x, y, w], axis=1, sort=False)
-    series = series.drop(series.index[[0,1]])
-    series = series.reset_index(drop=True)
-    series.index.names = ['time_index']
-    return series
-
-
-if __name__ == '__main__':
-    for k in range(20):
-        print("############### Inter " +str(k))
-        param_data = v_structure_generator()
-        # print(param_data)
-
-        res = run_timino(param_data, 4)
-        print(res)
-
-        nbcb = NBCBc(param_data, 4, 0.05)
-        nbcb.run()
-        print(nbcb.causal_order)
-        print(nbcb.causal_graph)
-        print(nbcb.window_causal_graph_dict)
-
-        nbcb2 = NBCBc(param_data, 4, 0.05)
-        nbcb2.constraint_based(bk=False)
-        print(nbcb2.window_causal_graph_dict)
-        # print(nbcb.causal_graph)
-
-        cbnb = CBNBc(param_data, 4, 0.05)
-        cbnb.run()
-        # print(cbnb.causal_graph)
-        print(cbnb.window_causal_graph_dict)
-
-        print(nbcb.window_causal_graph_dict == nbcb2.window_causal_graph_dict,
-              nbcb2.window_causal_graph_dict == cbnb.window_causal_graph_dict,
-              nbcb.window_causal_graph_dict == cbnb.window_causal_graph_dict)
-
+        print("NBCB_e finished!")
