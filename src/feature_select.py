@@ -104,13 +104,25 @@ class FeatureSelector:
         return significant_links_df
 
     def _select_features_nbcb(self, threshold=0.1):
-        data = self.data
-        # correlations = X.corrwith(y)
-        features = list()
-        return features
+        nbcb = NBCBe(
+            data=self.data,
+            tau_max=4,
+            sig_level=0.05,
+            linear=True,
+            model="linear",
+            indtest="linear"
+            cond_indtest="linear"
+        )
+        nbcb.run()
 
-    #####################수정#####################
-    def _select_features_varlingam(self, threshold=0.01):
+        edges = nbcb.causal_graph.get_edges()
+        target = self.target_col
+        rows = []
+
+        for e in edges:
+
+
+    def _select_features_varlingam(self, threshold=0.1):
         from lingam import VARLiNGAM
         import time
 
@@ -149,10 +161,8 @@ class FeatureSelector:
         return df_com_gold
 
 
-    #####################수정#####################
-
     def select_features(self):
-        # TODO Implement Lasso, VAR,  VARLiNGAM, NBCB
+        # TODO Implement Lasso, VAR, NBCB
         # TODO modify PCMCIPlUS
         if self.method == "Lasso":
             return self._select_features_lasso()

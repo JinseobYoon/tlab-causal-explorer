@@ -22,7 +22,7 @@ if __name__ == "__main__":
     target = "Com_Gold"
 
     # 테스트할 feature selection 방법들
-    methods = ["VARLiNGAM"] # 내가 원하는 방법만 넣기
+    methods = ["VARLiNGAM","NBCB"] # 내가 원하는 방법만 넣기
 
     # 각 방법별로 결과 확인
     for method in methods:
