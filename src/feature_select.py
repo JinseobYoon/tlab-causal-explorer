@@ -104,25 +104,32 @@ class FeatureSelector:
         return significant_links_df
 
     def _select_features_nbcb(self, threshold=0.1):
+        from src.nbcb_e import NBCBe
+
         nbcb = NBCBe(
             data=self.data,
             tau_max=4,
             sig_level=0.05,
             linear=True,
             model="linear",
-            indtest="linear"
+            indtest="linear",
             cond_indtest="linear"
         )
         nbcb.run()
 
-        edges = nbcb.causal_graph.get_edges()
         target = self.target_col
-        rows = []
+        links = []
+        if target in nbcb.window_causal_graph_dict:
+            for (cause, lag) in nbcb.window_causal_graph_dict[target]:
+                links.append({"Cause": cause, "Effect": target, "Lag": lag})
+        else:
+            print(f"Target {target} not found in NBCB result.")
 
-        for e in edges:
+        df = pd.DataFrame(links, columns=["Cause", "Effect", "Lag"])
+        return df
 
 
-    def _select_features_varlingam(self, threshold=0.1):
+    def _select_features_varlingam(self, threshold=0.01):
         from lingam import VARLiNGAM
         import time
 
