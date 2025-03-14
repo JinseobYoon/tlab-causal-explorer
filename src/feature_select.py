@@ -1,6 +1,42 @@
 import pandas as pd
 import numpy as np
 
+def nbcb_to_graph_matrix(nbcb_result, var_names, tau_max):
+    """
+    nbcb_result: dict, ex.{ 'Com_Gold': [('USD_DXY', 0), ('USD_CNY', -1), ...], ... }
+    var_names: list of str, ex.['USD_DXY', 'USD_CNY', 'Com_Gold', ...]
+    tau_max: int, 최대 시차
+
+    반환: (N, N, tau_max+1) 모양의 문자열 배열.
+    Cause → Effect 인과관계는 "-->"로 표시하며, lag는 절댓값 인덱스에 저장.
+    (lag가 0인 경우 반대쪽을 "<--"로 채움)
+    """
+    N = len(var_names)
+    # 그래프 배열을 빈 문자열로 초기화 (dtype='<U3'이면 충분)
+    graph = np.empty((N, N, tau_max+1), dtype='<U3')
+    graph[:] = ""
+
+    # nbcb_result는 effect를 key로, [(cause, lag), ...] 리스트 형식으로 되어 있다고 가정
+    for effect, cause_list in nbcb_result.items():
+        if effect not in var_names:
+            continue
+        effect_index = var_names.index(effect)
+        for cause, lag in cause_list:
+            if cause not in var_names:
+                continue
+            cause_index = var_names.index(cause)
+            lag_index = abs(lag)
+            if lag_index > tau_max:
+                continue  # tau_max 범위 넘어가면 건너뛰기
+            # Cause → Effect: "-->"로 기록
+            graph[cause_index, effect_index, lag_index] = "-->"
+            # lag가 0이면 반대쪽도 "<--"로 기록하여 대칭성을 유지
+            if lag_index == 0:
+                graph[effect_index, cause_index, 0] = "<--"
+    return graph
+
+def graph_to_val_matrix(graph):
+    return (graph != "").astype(float)
 
 def extract_significant_links(p_matrix, val_matrix, dataframe, target_col, alpha=0.05):
     links = []
@@ -105,6 +141,7 @@ class FeatureSelector:
 
     def _select_features_nbcb(self, threshold=0.1):
         from src.nbcb_e import NBCBe
+        from tigramite.plotting import plot_graph
 
         nbcb = NBCBe(
             data=self.data,
@@ -125,8 +162,24 @@ class FeatureSelector:
         else:
             print(f"Target {target} not found in NBCB result.")
 
-        df = pd.DataFrame(links, columns=["Cause", "Effect", "Lag"])
-        return df
+        result_df = pd.DataFrame(links, columns=["Cause", "Effect", "Lag"])
+
+        #시각화
+        var_names = list(self.data.columns)
+        tau_max = 4
+        graph_matrix = nbcb_to_graph_matrix(nbcb.window_causal_graph_dict, var_names, tau_max)
+        val_matrix = graph_to_val_matrix(graph_matrix)
+
+        plot_graph(
+            graph=graph_matrix,
+            val_matrix=val_matrix,
+            var_names=var_names,
+            figsize=(6, 6),
+            save_name="nbcb_result.pdf",  # 파일로 저장; 화면에 띄우려면 save_name=None
+            link_colorbar_label="Causal Effect",
+            arrow_linewidth=8.0
+        )
+        return result_df
 
 
     def _select_features_varlingam(self, threshold=0.01):

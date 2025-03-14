@@ -145,7 +145,7 @@ class NBCBe:
                         self.causal_graph.add_edge(
                             Edge(GraphNode(col_j), GraphNode(col_i), Endpoint.TAIL, Endpoint.ARROW))
 
-        for edge in self.causal_graph.get_edges():
+        for edge in self.causal_graph.edges():
             cause = edge.get_node1().get_name() if edge.get_endpoint1().name == "TAIL" else edge.get_node2().get_name()
             effect = edge.get_node2().get_name() if edge.get_endpoint2().name == "ARROW" else edge.get_node1().get_name()
             self.window_causal_graph_dict[effect].append((cause, 0))
