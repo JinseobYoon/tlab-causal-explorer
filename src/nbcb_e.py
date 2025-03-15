@@ -72,10 +72,13 @@ class NBCBe:
         self.graph = []
         self.forbidden_orientation = []
         self.window_causal_graph_dict = dict()
+        self.nodes_by_name = {}
         list_nodes = []
         for col in data.columns:
+            node = GraphNode(col)
+            list_nodes.append(node)
+            self.nodes_by_name[col] = node
             self.window_causal_graph_dict[col] = []
-            list_nodes.append(GraphNode(col))
         self.causal_graph = GeneralGraph(list_nodes)
 
     def noise_based(self):
@@ -94,11 +97,11 @@ class NBCBe:
 
     def constraint_based(self, bk=True):
         from tigramite import data_processing as pp
-        from tigramite.independence_tests.parcorr import ParCorr
+        from tigramite.independence_tests.cmiknn import CMIknn
         from tigramite.jpcmciplus import JPCMCIplus
 
         dataframe = pp.DataFrame(self.data.values, var_names=list(self.data.columns))
-        ind_test = ParCorr(significance='analytic')
+        ind_test = CMIknn(k=5) #K값을 몇으로 설정할까?
         N = self.data.shape[1]
         node_classification = {i: "system" for i in range(N)}
 
@@ -116,6 +119,7 @@ class NBCBe:
             alpha_level=self.sig_level
         )
 
+        # 1) PCMCI+ 결과 요약하는 summary_matrix 만들기
         summary_matrix = pd.DataFrame(
             np.zeros([N, N]),
             columns=self.data.columns,
@@ -129,23 +133,41 @@ class NBCBe:
                     elif results_plus["graph"][i, j, tau] == '<--':
                         summary_matrix.loc[self.data.columns[j], self.data.columns[i]] = 1
 
+        # 2) forbidden_orientation(인과 순서의 정보) 활용
+        list_columns = list(self.data.columns)
+
+        for (idx_j, idx_i) in self.forbidden_orientation:
+            cause_name = list_columns[idx_j]
+            effect_name = list_columns[idx_i]
+            # 만약 summary_matrix에서 cause_name->effect_name (즉 summary_matrix.loc[cause_name, effect_name]==1) 이라면
+            # 이 방향을 제거(또는 0으로 만든다)
+            if summary_matrix.loc[cause_name, effect_name] == 1:
+                summary_matrix.loc[cause_name, effect_name] = 0
+                # 필요하다면, 반대방향(effect->cause)을 1로 세팅할 수도 있음 (뒤집고 싶을 때)
+                # summary_matrix.loc[effect_name, cause_name] = 1
+
+        # 3) summary matrix를 self.causal_graph에 반영하기
         for col_i in self.data.columns:
             for col_j in self.data.columns:
+                # 이미 생성된 노드 객체를 재사용:
+                node_i = self.nodes_by_name[col_i]
+                node_j = self.nodes_by_name[col_j]
                 if (summary_matrix.loc[col_i, col_j] == 1) and (summary_matrix.loc[col_j, col_i] == 1):
-                    if (not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j))) and \
-                       (not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i))):
+                    if (not self.causal_graph.is_parent_of(node_i, node_j)) and \
+                            (not self.causal_graph.is_parent_of(node_j, node_i)):
                         self.causal_graph.add_edge(
-                            Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.ARROW, Endpoint.ARROW))
+                            Edge(node_i, node_j, Endpoint.ARROW, Endpoint.ARROW))
                 elif summary_matrix.loc[col_i, col_j] == 1:
-                    if not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j)):
+                    if not self.causal_graph.is_parent_of(node_i, node_j):
                         self.causal_graph.add_edge(
-                            Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.TAIL, Endpoint.ARROW))
+                            Edge(node_i, node_j, Endpoint.TAIL, Endpoint.ARROW))
                 elif summary_matrix.loc[col_j, col_i] == 1:
-                    if not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i)):
+                    if not self.causal_graph.is_parent_of(node_j, node_i):
                         self.causal_graph.add_edge(
-                            Edge(GraphNode(col_j), GraphNode(col_i), Endpoint.TAIL, Endpoint.ARROW))
+                            Edge(node_j, node_i, Endpoint.TAIL, Endpoint.ARROW))
 
-        for edge in self.causal_graph.edges():
+        # 4) 최종 edge를 self.window_causal_graph_dict에 저장
+        for edge in self.causal_graph.get_graph_edges():
             cause = edge.get_node1().get_name() if edge.get_endpoint1().name == "TAIL" else edge.get_node2().get_name()
             effect = edge.get_node2().get_name() if edge.get_endpoint2().name == "ARROW" else edge.get_node1().get_name()
             self.window_causal_graph_dict[effect].append((cause, 0))

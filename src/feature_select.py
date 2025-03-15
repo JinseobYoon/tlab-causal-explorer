@@ -78,14 +78,14 @@ class FeatureSelector:
     def _select_features_pcmci(self, threshold=0.1):
         import time
         from tigramite import data_processing as pp  # 전처리
-        from tigramite.independence_tests.parcorr import ParCorr  # 조건부 독립성 검정
+        from tigramite.independence_tests.cmiknn import CMIknn  # 조건부 독립성 검정
         from tigramite.pcmci import PCMCI
         start = time.time()
         data = self.data
         target_col = self.target_col
 
         dataframe = pp.DataFrame(data.values, var_names=list(data.columns))
-        ind_test = ParCorr()
+        ind_test = CMIknn(k=5) #K값을 어떻게 설정하지?
         pcmci = PCMCI(dataframe=dataframe, cond_ind_test=ind_test)
 
         # pcmci.run_pcmci : PCMCI 실행 후 결과 반환
