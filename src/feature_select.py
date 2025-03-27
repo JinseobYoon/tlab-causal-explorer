@@ -32,7 +32,6 @@ class FeatureSelector:
         )
         end = time.time()
         print(f"{self.method} : {end - start} seconds")
-        # 결과 처리 예시 (원하는 형태로 수정 가능)
         return results
 
     def _select_features_pcmciplus(self, threshold=0.1):
@@ -55,31 +54,36 @@ class FeatureSelector:
         )
         return results_plus
 
-    def _select_features_varlingam(self, threshold=0.01):
+    def _select_features_varlingam(self, threshold=0.05):
         from lingam import VARLiNGAM
-        import time
-        start = time.time()
-        model = VARLiNGAM()
+        model = model = VARLiNGAM(lags=3, criterion='bic', prune=False)
         model.fit(self.data.values)
         adjacency_mats = model.adjacency_matrices_
         var_names = list(self.data.columns)
         rows = []
+        feature_set = set()
+
         for lag, mat in enumerate(adjacency_mats, start=1):
             n = mat.shape[0]
             for i in range(n):
                 for j in range(n):
                     effect = mat[i, j]
                     if abs(effect) > threshold:
+                        from_var = f"{var_names[j]}(t-{lag})"
+                        to_var = f"{var_names[i]}(t)"
                         rows.append({
-                            "from": f"{var_names[j]}(t-{lag})",
-                            "to": f"{var_names[i]}(t)",
+                            "from": from_var,
+                            "to": to_var,
                             "effect": effect,
                         })
+
+                        if var_names[i] == self.target_col:
+                            feature_set.add(var_names[j])
+
         df = pd.DataFrame(rows, columns=["from", "to", "effect"])
-        df_com_gold = df[df["to"].str.startswith("Com_Gold")]
-        end = time.time()
-        print(f"{self.method} : {end - start} seconds")
-        return df_com_gold
+
+        print(f"Final VARLiNGAM features for {self.target_col}: {sorted(feature_set)}")
+        return sorted(feature_set)
 
     def _select_features_nbcb(self, threshold=0.1):
         from src.nbcb import NBCBw
@@ -90,12 +94,15 @@ class FeatureSelector:
             sig_level=0.05,
             linear=True,
         )
-        result = nbcb.run()
+        full_result, com_gold_causes = nbcb.run()
 
-        if result is None:
+        if full_result is None:
             raise ValueError("Error: NBCBw.run() returned None. Check the function implementation!")
 
-        return result
+        return {
+            "full_result": full_result,
+            "com_gold_causes": com_gold_causes
+        }
 
     def select_features(self):
         if self.method == "Lasso":

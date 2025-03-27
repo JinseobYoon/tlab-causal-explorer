@@ -15,16 +15,13 @@ class NBCBw:
     """
 
     def __init__(self,
-                 data: pd.DataFrame,
-                 tau_max: int = 3,
-                 sig_level: float = 0.05,
-                 linear: bool = True):
+                 data: pd.DataFrame, tau_max: int = 3, sig_level: float = 0.05, linear: bool = True):
         """
         :param data: 시계열 DataFrame (행=시간, 열=변수)
         :param tau_max: 최대 시차(lag) 설정
-        :param sig_level: 유의수준(alpha) 예: 0.05
-        :param linear: True면 VarLiNGAM 사용 (비선형 X),
-                       False면 여유롭게 RESIT 등 대안 사용 가능
+        :param sig_level: 유의수준(alpha)
+        :param linear: True면 VarLiNGAM 사용
+
         """
         self.data = data
         self.tau_max = tau_max
@@ -38,8 +35,8 @@ class NBCBw:
 
     def _noise_based(self):
         """
-        VarLiNGAM 등을 이용해 동시시점 인과순서(순위) 먼저 추정
-        - causal_order_matrix (상삼각=2, 하삼각=1)
+        VarLiNGAM을 이용해 동시시점 인과순서(순위) 먼저 추정
+        - causal_order_matrix (인과 방향)
         - forbidden_orientation (뒤집지 못할 방향 목록)
         """
         print("=== [NBCBw] Noise-Based Step: VarLiNGAM ===")
@@ -60,7 +57,7 @@ class NBCBw:
             dtype=int
         )
 
-        # order_list에서 앞쪽일수록 “원인”에 가깝다
+        # order_list에는 0, 1, 2에 대한 정보만 포함됨 (원인 - 결과의 방향만 표시)
         for i in range(n):
             for j in range(i + 1, n):
                 idx_i = order_list.index(i)
@@ -100,15 +97,21 @@ class NBCBw:
 
         # 2. 독립성 검정(ParCorr) + PCMCI+
         cond_ind_test = ParCorr(significance='analytic')
-        pcmci = PCMCI(dataframe=dataframe, cond_ind_test=cond_ind_test, verbosity=0)
 
-        results = pcmci.run_pcmciplus(tau_min=0, tau_max=self.tau_max, pc_alpha=self.sig_level)
+        # 3. PCMCI + 실행
+        pcmci = PCMCI(dataframe=dataframe, cond_ind_test=cond_ind_test, verbosity=0)
+        results = pcmci.run_pcmciplus(tau_min=0, tau_max=self.tau_max, pc_alpha=self.sig_level) # 메모리 여기가 문제인가?
+
+        if isinstance(results, tuple):
+            results = results[0]
         graph_3d = np.squeeze(results["graph"], axis=-1) if results["graph"].ndim == 4 else results["graph"]
 
-        # 4. graph_3d를 순회하며 i(t - tau) -> j(t)인 경우를 찾고 window_causal_graph_dict에 기록
+        # 4. 결과 배열 확인
+        print("PCMCI+ graph shape:", results["graph"].shape)
+
+        # 5. 결과 파싱
         n = self.data.shape[1]
         var_names = list(self.data.columns)
-
         for i in range(n):
             for j in range(n):
                 for tau in range(self.tau_max + 1):
@@ -116,35 +119,27 @@ class NBCBw:
                         continue
                     symbol = graph_3d[i, j, tau]
 
-                    # 만약 symbol이 여전히 배열이라면, 간단히 첫 번째 값만 보거나
-                    # 원하는 방식으로 변환
+                    # 6. 예상 외의 다중 값 예외 처리
                     if isinstance(symbol, (list, tuple, np.ndarray)):
                         if len(symbol) == 1:
-                            symbol = symbol[0]
+                            symbol = symbol[0]  # 단일 값이면 첫 번째 요소 사용
                         else:
-                            continue
+                            print(f"⚠ Unexpected format at ({i}, {j}, {tau}):", symbol)
+                            continue  # 다중 값이면 무시하고 다음으로 진행
 
+                    # 7. 올바른 방향성인 경우 추가
                     if symbol == '-->':
-                        # tau=0이면 동시 시점, tau>0이면 i(t-tau) -> j(t)
                         lag_val = 0 if tau == 0 else -tau
                         cause_name = var_names[i]
                         effect_name = var_names[j]
                         self.window_causal_graph_dict[effect_name].append((cause_name, lag_val))
 
-        # 5. forbidden_orientation 반영 (Noise-Based에서 결정된 방향은 뒤집지 않도록)
-        #    즉, j->i가 금지된 경우, 만약 window_causal_graph_dict[i] 안에 j가 원인으로 들어 있으면 제거
-        for (idx_j, idx_i) in self.forbidden_orientation:
-            cause_name = var_names[idx_j]
-            effect_name = var_names[idx_i]
-            self.window_causal_graph_dict[effect_name] = [
-                entry for entry in self.window_causal_graph_dict[effect_name] if entry[0] != cause_name
-            ]
-
+        print("=== [Constraint-Based] final window_causal_graph_dict ===")
+        for var in var_names:
+            print(var, ":", self.window_causal_graph_dict[var])
 
     def run(self):
-        print("######## Running Noise-based step ########")
         self._noise_based()
-        print("######## Running Constraint-based step ########")
         self._constraint_based()
 
         # Com_Gold에 영향을 미치는 변수 리스트 저장
