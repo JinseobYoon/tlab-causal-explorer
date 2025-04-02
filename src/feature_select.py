@@ -15,77 +15,42 @@ class FeatureSelector:
         # Placeholder: VAR 모델 기반 feature selection 구현
         return []
 
-    def _select_features_pcmci(self, threshold=0.1):
-        import time
-        from tigramite import data_processing as pp
-        from tigramite.independence_tests.parcorr import ParCorr
-        from tigramite.pcmci import PCMCI
-        start = time.time()
-        dataframe = pp.DataFrame(self.data.values, var_names=list(self.data.columns))
-        ind_test = ParCorr()
-        pcmci = PCMCI(dataframe=dataframe, cond_ind_test=ind_test)
-        results = pcmci.run_pcmci(tau_max=3)
-        pcmci.print_significant_links(
-            p_matrix=results['p_matrix'],
-            val_matrix=results['val_matrix'],
-            alpha_level=0.05
-        )
-        end = time.time()
-        print(f"{self.method} : {end - start} seconds")
-        return results
 
     def _select_features_pcmciplus(self, threshold=0.1):
-        from tigramite.jpcmciplus import JPCMCIplus
-        from tigramite import data_processing as pp
-        from tigramite.independence_tests.parcorr import ParCorr
-        dataframe = pp.DataFrame(self.data.values, var_names=list(self.data.columns))
-        ind_test = ParCorr()
-        node_classification = {i: "system" for i in range(self.data.shape[1])}
-        jpcmci_plus = JPCMCIplus(
-            dataframe=dataframe,
-            cond_ind_test=ind_test,
-            node_classification=node_classification
+        from src.pcmci_plus import constraint_based
+
+        selector = constraint_based(
+            data=self.data,
+            tau_max=3,
+            alpha=threshold
         )
-        results_plus = jpcmci_plus.run_pcmciplus(tau_max=3)
-        jpcmci_plus.print_significant_links(
-            p_matrix=results_plus['p_matrix'],
-            val_matrix=results_plus['val_matrix'],
-            alpha_level=0.05
+
+        causal_features = selector.select_features_pcmci_plus()
+
+        # 변수명만 추출해서 정리
+        feature_names = sorted(set([var for var, lag in causal_features]))
+
+        print(f"PCMCI+ selected features for {self.target_col}: {feature_names}")
+        return feature_names
+
+    def _select_features_varlingam(self, threshold=0.01):
+        from src.varlingam import noise_based
+
+        selector = noise_based(
+            data=self.data,
+            tau_max=3,
+            threshold=threshold,
+            target_var=self.target_col
         )
-        return results_plus
 
-    def _select_features_varlingam(self, threshold=0.05):
-        from lingam import VARLiNGAM
-        model = model = VARLiNGAM(lags=3, criterion='bic', prune=False)
-        model.fit(self.data.values)
-        adjacency_mats = model.adjacency_matrices_
-        var_names = list(self.data.columns)
-        rows = []
-        feature_set = set()
+        selector.fit()
 
-        for lag, mat in enumerate(adjacency_mats, start=1):
-            n = mat.shape[0]
-            for i in range(n):
-                for j in range(n):
-                    effect = mat[i, j]
-                    if abs(effect) > threshold:
-                        from_var = f"{var_names[j]}(t-{lag})"
-                        to_var = f"{var_names[i]}(t)"
-                        rows.append({
-                            "from": from_var,
-                            "to": to_var,
-                            "effect": effect,
-                        })
+        final_features = selector.select_features(return_only_var_names=True) # True -> 이름만
 
-                        if var_names[i] == self.target_col:
-                            feature_set.add(var_names[j])
+        print(f"[VarLiNGAM] selected features for {self.target_col}: {final_features}")
+        return final_features
 
-        df = pd.DataFrame(rows, columns=["from", "to", "effect"])
-
-        print(f"Final VARLiNGAM features for {self.target_col}: {sorted(feature_set)}")
-        return sorted(feature_set)
-
-    def _select_features_nbcb(self, threshold=0.1):
+    def _select_features_nbcb(self, threshold=0.01):
         from src.nbcb import NBCBw
 
         nbcb = NBCBw(

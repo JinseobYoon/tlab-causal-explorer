@@ -1,148 +1,254 @@
-import numpy as np
+
+########CBNB_e 한번 구현해보기########
+
+import random
+import networkx as nx
 import pandas as pd
+import numpy as np
 
-from tigramite import data_processing as pp
-from tigramite.independence_tests.parcorr import ParCorr
-from tigramite.pcmci import PCMCI
-from lingam import VARLiNGAM
+from sklearn.linear_model import LinearRegression as lr
+from pcgce import CITCE  # 반드시 설치되어 있어야 함
+from lingam.var_lingam import VARLiNGAM
+from lingam.resit import RESIT
 
-class NBCBw:
-    """
-    Noise-Based (VarLiNGAM) + Constraint-Based (PCMCI+) 시계열 인과추론 모델
-    - Window Causal Graph 형태 (lag>0은 시간방향, lag=0은 noise-based 순서)
-    - forbidden_orientation: NB 단계에서 결정한 인과방향을
-      CB 단계에서 뒤집지 못하도록 하는 제약
-    """
+import matplotlib.pyplot as plt
+1
+from causallearn.graph.Edge import Edge
+from causallearn.graph.Endpoint import Endpoint
+from causallearn.graph.GeneralGraph import GeneralGraph
+from causallearn.graph.GraphNode import GraphNode
 
-    def __init__(self,
-                 data: pd.DataFrame, tau_max: int = 3, sig_level: float = 0.05, linear: bool = True):
-        """
-        :param data: 시계열 DataFrame (행=시간, 열=변수)
-        :param tau_max: 최대 시차(lag) 설정
-        :param sig_level: 유의수준(alpha)
-        :param linear: True면 VarLiNGAM 사용
+import os, glob
 
-        """
+
+def clear_args(dir_path):
+    files = glob.glob(os.path.join(dir_path, 'args/*'))
+    for f in files:
+        os.remove(f)
+
+
+def clear_results(dir_path):
+    files = glob.glob(os.path.join(dir_path, 'results/*'))
+    for f in files:
+        os.remove(f)
+
+
+def process_data(data, nlags):
+    nodes_to_temporal_nodes = dict()
+    temporal_nodes = []
+    for node in data.columns:
+        nodes_to_temporal_nodes[node] = []
+        for gamma in range(nlags + 1):
+            if gamma == 0:
+                temporal_node = f"{node}_t"
+            else:
+                temporal_node = f"{node}_t_{gamma}"
+            nodes_to_temporal_nodes[node].append(temporal_node)
+            temporal_nodes.append(temporal_node)
+
+    new_data = pd.DataFrame()
+    for gamma in range(nlags + 1):
+        shifteddata = data.shift(periods=-nlags + gamma)
+        new_columns = [nodes_to_temporal_nodes[node][gamma] for node in data.columns]
+        shifteddata.columns = new_columns
+        new_data = pd.concat([new_data, shifteddata], axis=1, join="outer")
+    new_data.dropna(inplace=True)
+    return new_data, nodes_to_temporal_nodes, temporal_nodes
+
+
+def run_varlingam(data, tau_max):
+    model = VARLiNGAM(lags=tau_max, criterion='bic', prune=False)
+    model.fit(data)
+    order = model.causal_order_
+    order = [data.columns[i] for i in order]
+    order.reverse()
+    order_matrix = pd.DataFrame(0, index=data.columns, columns=data.columns, dtype=int)
+    for col_i in order_matrix.index:
+        for col_j in order_matrix.columns:
+            if col_i != col_j:
+                index_i = order.index(col_i)
+                index_j = order.index(col_j)
+                if index_i > index_j:
+                    order_matrix.loc[col_i, col_j] = 1  # col_j is parent of col_i
+                else:
+                    order_matrix.loc[col_j, col_i] = 1
+    return order_matrix
+
+
+def run_resit(data, tau_max):
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    reg = GaussianProcessRegressor(normalize_y=True)
+    model = RESIT(regressor=reg)
+    model.fit(data)
+    order = model.causal_order_
+    order = [data.columns[i] for i in order]
+    order.reverse()
+    order_matrix = pd.DataFrame(0, index=data.columns, columns=data.columns, dtype=int)
+    for col_i in order_matrix.index:
+        for col_j in order_matrix.columns:
+            if col_i != col_j:
+                index_i = order.index(col_i)
+                index_j = order.index(col_j)
+                if index_i > index_j:
+                    order_matrix.loc[col_i, col_j] = 1
+                else:
+                    order_matrix.loc[col_j, col_i] = 1
+    return order_matrix
+
+
+class CBNBe:
+    def __init__(self, data, tau_max, sig_level, linear=True, model="linear",
+                 indtest="linear", cond_indtest="linear"):
         self.data = data
         self.tau_max = tau_max
         self.sig_level = sig_level
         self.linear = linear
+        self.model = model
+        self.indtest = indtest
+        self.cond_indtest = cond_indtest
 
-        # Noise-Based 결과
-        self.causal_order_matrix = None       # VarLiNGAM에서 추출된 인과순서 매트릭스
-        self.forbidden_orientation = []       # NB 단계에서 금지된 방향 (i->j 고정)
+        self.causal_order = []
+        self.graph = []  # 최종 causal graph (causallearn의 graph 객체)
+        self.forbidden_orientation = []
+
+        # 각 변수별 lagged parent 정보를 저장할 dict
         self.window_causal_graph_dict = {col: [] for col in data.columns}
+        self.window_causal_graph = None
 
-    def _noise_based(self):
-        """
-        VarLiNGAM을 이용해 동시시점 인과순서(순위) 먼저 추정
-        - causal_order_matrix (인과 방향)
-        - forbidden_orientation (뒤집지 못할 방향 목록)
-        """
-        print("=== [NBCBw] Noise-Based Step: VarLiNGAM ===")
+        # causallearn의 그래프 초기화
+        list_nodes = [GraphNode(col) for col in data.columns]
+        self.causal_graph = GeneralGraph(list_nodes)
 
-        # 1. VarLiNGAM 모델 적합
-        model = VARLiNGAM(lags=3, criterion='bic', prune=False) if self.linear else None
-        model.fit(self.data.values)
+    def constraint_based(self):
+        # CITCE를 사용하여 조건부 독립성 기반 skeleton 추정
+        pcgce = CITCE(self.data, sig_lev=self.sig_level, lag_max=self.tau_max, linear=self.linear)
+        pcgce.skeleton_initialize()
+        pcgce.find_sep_set()
 
-        order_list = model.causal_order_  # 예: [0, 2, 1, ...] (변수 인덱스 순서)
-        var_names = list(self.data.columns)
-        n = len(var_names)
+        print("CB 단계: CITCE에서 추정한 skeleton edges:")
+        print(pcgce.graph.ghat.edges)
 
-        # 2. 인과순서 행렬
-        order_matrix = pd.DataFrame(
-            np.zeros((n, n)),
-            columns=var_names,
-            index=var_names,
-            dtype=int
-        )
+        col_names = list(self.data.columns)
+        # 초기 causal graph를 "---"로 채운 3D array (lag 0 ~ tau_max)
+        self.window_causal_graph = np.full([len(col_names), len(col_names), self.tau_max + 1], "---", dtype=object)
+        map_names_nodes_inv = {}
+        for node in pcgce.graph.map_names_nodes:
+            for node_t in pcgce.graph.map_names_nodes[node]:
+                map_names_nodes_inv[node_t] = node
+        # edge를 순회하며 lag 정보 설정 (lag=0는 동시, lag>=1은 시차 효과)
+        for edge in pcgce.graph.ghat.edges:
+            node_0 = map_names_nodes_inv[edge[0]]
+            node_1 = map_names_nodes_inv[edge[1]]
+            i = col_names.index(node_0)
+            j = col_names.index(node_1)
+            # 예시에서는 edge[0]가 현재 시점(t=0)인 경우, lag 1부터 effect로 간주
+            # 필요시 아래 조건을 데이터에 맞게 수정
+            for t in range(1, self.tau_max + 1):
+                self.window_causal_graph[i, j, t] = "-->"
+        print("CB 단계 후 window_causal_graph:")
+        print(self.window_causal_graph)
 
-        # order_list에는 0, 1, 2에 대한 정보만 포함됨 (원인 - 결과의 방향만 표시)
-        for i in range(n):
-            for j in range(i + 1, n):
-                idx_i = order_list.index(i)
-                idx_j = order_list.index(j)
-                if idx_i < idx_j:
-                    # i -> j
-                    order_matrix.iloc[i, j] = 1
-                    order_matrix.iloc[j, i] = 2
+    def find_cycle_groups(self):
+        instantaneous_nodes = []
+        instantaneous_graph = nx.Graph()
+        for i in range(len(self.data.columns)):
+            for j in range(len(self.data.columns)):
+                t = 0  # t=0: 동시 효과
+                if self.window_causal_graph[i, j, t] in {"o-o", "x-x", "-->", "<--"}:
+                    instantaneous_graph.add_edge(self.data.columns[i], self.data.columns[j])
+                    if self.data.columns[i] not in instantaneous_nodes:
+                        instantaneous_nodes.append(self.data.columns[i])
+        list_cycles = nx.cycle_basis(instantaneous_graph)
+        cycle_groups = {}
+        idx = 0
+        for cycle in list_cycles:
+            cycle_groups[idx] = cycle
+            idx += 1
+        return cycle_groups, list_cycles, instantaneous_nodes
+
+    def noise_based(self):
+        # 여기서는 cycle 그룹 내에서 VARLiNGAM (또는 RESIT)로 재정렬해 인과 방향을 재확인
+        cycle_groups, list_cycles, instantaneous_nodes = self.find_cycle_groups()
+        print("즉시 효과를 가진 노드들:", instantaneous_nodes)
+        print("cycle groups:", cycle_groups)
+
+        list_columns = list(self.data.columns)
+        if len(instantaneous_nodes) > 1:
+            for idx in cycle_groups.keys():
+                cyc_nodes = cycle_groups[idx]
+                # 나머지 부모 후보: cycle 외의 변수들
+                parents_nodes = list(set(list_columns) - set(cyc_nodes))
+                sub_data = self.data[cyc_nodes + parents_nodes]
+                # 선형 모형 사용 여부에 따라 VARLiNGAM 또는 RESIT 실행
+                if self.linear:
+                    causal_order = run_varlingam(sub_data, self.tau_max)
                 else:
-                    # j -> i
-                    order_matrix.iloc[j, i] = 1
-                    order_matrix.iloc[i, j] = 2
+                    causal_order = run_resit(sub_data, self.tau_max)
+                print("노이즈 기반 causal order (cycle 그룹):")
+                print(causal_order)
+                # causal_order에 따라 lag=0에서 방향을 정해준다.
+                for col_i in cyc_nodes:
+                    for col_j in cyc_nodes:
+                        if col_i == col_j:
+                            continue
+                        if (causal_order.loc[col_i, col_j] == 0) and (causal_order.loc[col_j, col_i] == 1):
+                            i = list_columns.index(col_i)
+                            j = list_columns.index(col_j)
+                            t = 0
+                            if self.window_causal_graph[i, j, t] in {"o-o", "x-x", "-->", "<--"}:
+                                self.window_causal_graph[i, j, t] = "-->"
+                                self.window_causal_graph[j, i, t] = "<--"
+                                print(f"방향 수정: {col_i} -> {col_j} at t={t}")
 
-        self.causal_order_matrix = order_matrix
+    def construct_summary_causal_graph(self):
+        summary_matrix = pd.DataFrame(0, index=self.data.columns, columns=self.data.columns)
+        for i in range(len(self.data.columns)):
+            for j in range(len(self.data.columns)):
+                for t in range(self.tau_max + 1):
+                    if self.window_causal_graph[i, j, t] == '-->':
+                        if (self.data.columns[i], -t) not in self.window_causal_graph_dict[self.data.columns[j]]:
+                            self.window_causal_graph_dict[self.data.columns[j]].append((self.data.columns[i], -t))
+                            summary_matrix.loc[self.data.columns[i], self.data.columns[j]] = 1
+                    elif self.window_causal_graph[i, j, t] == '<--':
+                        if (self.data.columns[j], -t) not in self.window_causal_graph_dict[self.data.columns[i]]:
+                            self.window_causal_graph_dict[self.data.columns[i]].append((self.data.columns[j], -t))
+                            summary_matrix.loc[self.data.columns[j], self.data.columns[i]] = 1
 
-        # 3. forbidden_orientation 설정
-        for i in range(n):
-            for j in range(n):
-                if i != j and order_matrix.iloc[i, j] == 1 and order_matrix.iloc[j, i] == 2:
-                    # i->j가 결정됐으니 j->i는 금지
-                    self.forbidden_orientation.append((j, i))
-
-        print("Causal Order Matrix:\n", self.causal_order_matrix)
-
-    def _constraint_based(self):
-        """
-        PCMCI+ (Constraint-Based) 단계
-        - forbidden_orientation을 이용해 NBCB에서 뒤집으면 안되는 방향을 보존
-        """
-        print("=== [NBCBw] Constraint-Based Step: PCMCI+ ===")
-
-        # 1. Tigramite용 DataFrame 생성
-        dataframe = pp.DataFrame(
-            data=self.data.values,
-            var_names=list(self.data.columns)
-        )
-
-        # 2. 독립성 검정(ParCorr) + PCMCI+
-        cond_ind_test = ParCorr(significance='analytic')
-
-        # 3. PCMCI + 실행
-        pcmci = PCMCI(dataframe=dataframe, cond_ind_test=cond_ind_test, verbosity=0)
-        results = pcmci.run_pcmciplus(tau_min=0, tau_max=self.tau_max, pc_alpha=self.sig_level) # 메모리 여기가 문제인가?
-
-        if isinstance(results, tuple):
-            results = results[0]
-        graph_3d = np.squeeze(results["graph"], axis=-1) if results["graph"].ndim == 4 else results["graph"]
-
-        # 4. 결과 배열 확인
-        print("PCMCI+ graph shape:", results["graph"].shape)
-
-        # 5. 결과 파싱
-        n = self.data.shape[1]
-        var_names = list(self.data.columns)
-        for i in range(n):
-            for j in range(n):
-                for tau in range(self.tau_max + 1):
-                    if i == j:
-                        continue
-                    symbol = graph_3d[i, j, tau]
-
-                    # 6. 예상 외의 다중 값 예외 처리
-                    if isinstance(symbol, (list, tuple, np.ndarray)):
-                        if len(symbol) == 1:
-                            symbol = symbol[0]  # 단일 값이면 첫 번째 요소 사용
-                        else:
-                            print(f"⚠ Unexpected format at ({i}, {j}, {tau}):", symbol)
-                            continue  # 다중 값이면 무시하고 다음으로 진행
-
-                    # 7. 올바른 방향성인 경우 추가
-                    if symbol == '-->':
-                        lag_val = 0 if tau == 0 else -tau
-                        cause_name = var_names[i]
-                        effect_name = var_names[j]
-                        self.window_causal_graph_dict[effect_name].append((cause_name, lag_val))
-
-        print("=== [Constraint-Based] final window_causal_graph_dict ===")
-        for var in var_names:
-            print(var, ":", self.window_causal_graph_dict[var])
+        # causallearn의 graph 객체에 edge 추가
+        for col_i in self.data.columns:
+            for col_j in self.data.columns:
+                if summary_matrix.loc[col_i, col_j] == 1 and summary_matrix.loc[col_j, col_i] == 1:
+                    if (not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j)) and
+                            not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i))):
+                        self.causal_graph.add_edge(
+                            Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.ARROW, Endpoint.ARROW))
+                elif summary_matrix.loc[col_i, col_j] == 1:
+                    if not self.causal_graph.is_parent_of(GraphNode(col_i), GraphNode(col_j)):
+                        self.causal_graph.add_edge(
+                            Edge(GraphNode(col_i), GraphNode(col_j), Endpoint.TAIL, Endpoint.ARROW))
+                elif summary_matrix.loc[col_j, col_i] == 1:
+                    if not self.causal_graph.is_parent_of(GraphNode(col_j), GraphNode(col_i)):
+                        self.causal_graph.add_edge(
+                            Edge(GraphNode(col_j), GraphNode(col_i), Endpoint.TAIL, Endpoint.ARROW))
+        print("Summary causal graph (edge list):")
+        print(self.causal_graph.get_graph_edges())
 
     def run(self):
-        self._noise_based()
-        self._constraint_based()
+        print("######## Running Constraint-based ########")
+        self.constraint_based()
+        print("######## Running Noise-based ########")
+        self.noise_based()
+        print("######## Construct summary causal graph ########")
+        self.construct_summary_causal_graph()
 
-        # Com_Gold에 영향을 미치는 변수 리스트 저장
-        com_gold_causes = [cause for cause, lag in self.window_causal_graph_dict.get("Com_Gold", [])]
 
-        return self.window_causal_graph_dict, com_gold_causes
+if __name__ == '__main__':
+    # 데이터 불러오기 (예시: csv 파일 등)
+    # data = pd.read_csv("your_data.csv")
+    # 여기서는 임의의 예시 데이터로 진행합니다.
+    np.random.seed(0)
+    data = pd.DataFrame(np.random.randn(200, 10), columns=[f"Var{i}" for i in range(10)])
+
+    # 예시: tau_max=3, sig_level=0.05
+    cbnb_e = CBNBe(data, tau_max=3, sig_level=0.05, linear=True)
+    cbnb_e.run()
